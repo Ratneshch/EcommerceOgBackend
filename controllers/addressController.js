@@ -2,18 +2,18 @@ const db = require("../config/db");
 
 // Add a new address
 exports.addAddress = async (req, res) => {
-  const { user_id, full_name, phone, address_line, city, state, postal_code, country } = req.body;
+  const { user_id, fullName, address, city, state, country, pincode, phoneNumber, type } = req.body;
 
-  if (!user_id || !full_name || !phone || !address_line || !city || !state || !postal_code || !country) {
+  if (!user_id || !fullName || !address || !city || !state || !country || !pincode || !phoneNumber) {
     return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
     const [result] = await db.query(
       `INSERT INTO addresses 
-      (user_id, full_name, phone, address_line, city, state, postal_code, country)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user_id, full_name, phone, address_line, city, state, postal_code, country]
+      (user_id, fullName, address, city, state, country, pincode, phoneNumber, type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user_id, fullName, address, city, state, country, pincode, phoneNumber, type || 'Home']
     );
 
     res.status(201).json({ message: "Address added successfully", addressId: result.insertId });
@@ -28,11 +28,7 @@ exports.getUserAddresses = async (req, res) => {
   const { user_id } = req.params;
 
   try {
-    const [addresses] = await db.query(
-      "SELECT * FROM addresses WHERE user_id = ?",
-      [user_id]
-    );
-
+    const [addresses] = await db.query("SELECT * FROM addresses WHERE user_id = ?", [user_id]);
     res.json(addresses);
   } catch (error) {
     console.error(error);
@@ -45,10 +41,7 @@ exports.getAddressById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [address] = await db.query(
-      "SELECT * FROM addresses WHERE id = ?",
-      [id]
-    );
+    const [address] = await db.query("SELECT * FROM addresses WHERE id = ?", [id]);
 
     if (!address.length) return res.status(404).json({ message: "Address not found" });
 
@@ -62,14 +55,15 @@ exports.getAddressById = async (req, res) => {
 // Update an address
 exports.updateAddress = async (req, res) => {
   const { id } = req.params;
-  const { full_name, phone, address_line, city, state, postal_code, country } = req.body;
+  const { fullName, address, city, state, country, pincode, phoneNumber, type } = req.body;
 
   try {
     await db.query(
       `UPDATE addresses SET 
-        full_name = ?, phone = ?, address_line = ?, city = ?, state = ?, postal_code = ?, country = ? 
+        fullName = ?, address = ?, city = ?, state = ?, country = ?, 
+        pincode = ?, phoneNumber = ?, type = ?
        WHERE id = ?`,
-      [full_name, phone, address_line, city, state, postal_code, country, id]
+      [fullName, address, city, state, country, pincode, phoneNumber, type || 'Home', id]
     );
 
     res.json({ message: "Address updated successfully" });

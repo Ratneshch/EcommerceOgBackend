@@ -1,25 +1,15 @@
+
+
 const express = require("express");
 const router = express.Router();
-const { registerUser, loginUser } = require("../controllers/authController");
-const { validateRequest, protect } = require("../middleware/authMiddleware");
+const authController = require("../controllers/authController");
+const {protect} = require("../middleware/authMiddleware");
 
-// ✅ Register route with validation
-router.post(
-  "/register",
-  validateRequest(["name", "email", "password"]),
-  registerUser
-);
 
-// ✅ Login route with validation
-router.post(
-  "/login",
-  validateRequest(["email", "password"]),
-  loginUser
-);
 
-// ✅ Example protected route
-router.get("/profile", protect, (req, res) => {
-  res.json({ message: "Welcome to your profile", user: req.user });
-});
+
+router.post("/register", authController.userRegister);
+router.post("/verify-otp",authController.verifyOTP);
+router.post("/login", authController.login);
 
 module.exports = router;

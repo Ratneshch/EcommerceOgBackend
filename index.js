@@ -10,6 +10,7 @@ const cartRoutes = require("./routes/cartRoutes");
 const addressRoutes = require("./routes/addressRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 
+
 // Initialize express app
 const app = express();
 
@@ -31,7 +32,8 @@ app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/addresses", addressRoutes);
-app.use("/api/reviews", reviewRoutes);
+app.use("/api/reviews",reviewRoutes);
+
 
 // ✅ Default route
 app.get("/", (req, res) => {
@@ -39,7 +41,7 @@ app.get("/", (req, res) => {
 });
 
 // ✅ Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
 });

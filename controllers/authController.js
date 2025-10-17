@@ -1,73 +1,106 @@
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const sendMail = require("../utils/mailer");
 
-// ✅ Register User
-// ✅ Register User
-exports.registerUser = async (req, res, next) => {
+exports.userRegister = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // 1️⃣ Check if user already exists
-    const [existingUser] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
-    if (existingUser.length > 0) {
-      return res.status(400).json({ message: "Email already registered" });
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: "All fields are required" });
     }
 
-    // 2️⃣ Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const [users] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+    if (users.length > 0) {
+      return res.status(400).json({ success: false, message: "User already exists. Please login." });
+    }
 
-    // 3️⃣ Insert new user
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Save user with OTP and is_verified = 0
     const [result] = await db.query(
-      "INSERT INTO users (name, email, password, created_at) VALUES (?, ?, ?, NOW())",
-      [name, email, hashedPassword]
+      `INSERT INTO users (name, email, password, otp, otp_expires, is_verified, created_at)
+       VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE), 0, NOW())`,
+      [name, email, hashedPassword, otp]
     );
 
-    // 4️⃣ Prepare user object
-    const newUser = {
-      id: result.insertId,
-      name,
-      email,
-    };
-
-    // 5️⃣ Generate JWT
-    const token = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
-
-    // 6️⃣ Return user + token
-    res.status(201).json({
-      message: "User registered successfully",
-      user: newUser,
-      token,
+    // Send OTP email
+    await sendMail({
+      to: email,
+      subject: "Your Registration OTP",
+      otp,
     });
-  } catch (err) {
-    next(err);
+
+    return res.status(201).json({
+      success: true,
+      message: "OTP sent to your email. Verify to complete registration.",
+      userId: result.insertId,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-
-// ✅ Login User
-// ✅ Login User
-exports.loginUser = async (req, res, next) => {
+exports.verifyOTP = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, otp } = req.body;
 
-    const [users] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
-    if (!users.length) return res.status(400).json({ message: "User not found" });
+    if (!email || !otp) return res.status(400).json({ message: "Email and OTP are required" });
+
+    const [users] = await db.query("SELECT * FROM users WHERE email = ? AND otp = ?", [email, otp]);
+    if (users.length === 0) return res.status(400).json({ message: "Invalid OTP" });
 
     const user = users[0];
+
+    if (new Date() > new Date(user.otp_expires)) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    // OTP verified → set is_verified = 1 and clear OTP
+    await db.query("UPDATE users SET is_verified = 1, otp = NULL, otp_expires = NULL WHERE id = ?", [user.id]);
+
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
+
+    return res.json({
+      message: "Registration successful",
+      token,
+      user: { id: user.id, name: user.name, email: user.email },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
+
+    const [users] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+    if (users.length === 0) return res.status(400).json({ message: "User not found" });
+
+    const user = users[0];
+
+    if (user.is_verified === 0) {
+      return res.status(400).json({ message: "Please verify your email before logging in" });
+    }
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ message: "Invalid password" });
 
-    // Generate token
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
 
-    // Return user + token
-    res.json({
+    return res.json({
       message: "Login successful",
-      user: { id: user.id, name: user.name, email: user.email },
       token,
+      user: { id: user.id, name: user.name, email: user.email },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

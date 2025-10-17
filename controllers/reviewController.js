@@ -1,74 +1,90 @@
-const db = require("../config/db");
+const db = require('../config/db');
 
-// Add a new review
+// Add review
 exports.addReview = async (req, res) => {
-  const { user_id, product_id, rating, comment } = req.body;
+    try {
+        const { productId, userId, rating, comment } = req.body;
+        if (!productId || !userId || !rating) {
+            return res.status(400).json({ error: "Missing required fields" });
+        }
 
-  if (!user_id || !product_id || !rating) {
-    return res.status(400).json({ message: "user_id, product_id and rating are required" });
-  }
+        // Insert review
+        const [result] = await db.query(
+            `INSERT INTO reviews (product_id, user_id, rating, comment) VALUES (?, ?, ?, ?)`,
+            [productId, userId, rating, comment || null]
+        );
 
-  try {
-    const [result] = await db.query(
-      "INSERT INTO reviews (user_id, product_id, rating, comment) VALUES (?, ?, ?, ?)",
-      [user_id, product_id, rating, comment || ""]
-    );
+        // Update average rating in products
+        const [avg] = await db.query(
+            `SELECT AVG(rating) as avgRating FROM reviews WHERE product_id = ?`,
+            [productId]
+        );
+        await db.query(`UPDATE products SET rating = ? WHERE id = ?`, [avg[0].avgRating, productId]);
 
-    res.status(201).json({ message: "Review added successfully", reviewId: result.insertId });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+        res.json({ message: "Review added successfully", reviewId: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
-// Get all reviews for a product
-exports.getProductReviews = async (req, res) => {
-  const { product_id } = req.params;
+// Get reviews for a product
 
-  try {
-    const [reviews] = await db.query(
-      `SELECT r.*, u.name AS user_name 
-       FROM reviews r 
-       JOIN users u ON r.user_id = u.id 
-       WHERE r.product_id = ? 
-       ORDER BY created_at DESC`,
-      [product_id]
-    );
 
-    res.json(reviews);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+exports.getProductReview = async (req, res) => {
+    try {
+        const { productId } = req.params;
+
+        if (!productId) {
+            return res.status(400).json({ error: "Product ID is required" });
+        }
+
+        console.log("Fetching reviews for Product ID:", productId);
+
+        // Use correct user column: 'username' or 'name'
+        const [reviews] = await db.query(
+            `SELECT r.id, r.rating, r.comment, r.created_at, u.name as userName
+             FROM reviews r
+             JOIN users u ON r.user_id = u.id
+             WHERE r.product_id = ?`,
+            [productId]
+        );
+
+        console.log("Reviews fetched:", reviews);
+
+        if (reviews.length === 0) {
+            return res.json({ message: "No reviews found for this product", reviews: [] });
+        }
+
+        res.json(reviews);
+    } catch (err) {
+        console.error("Error fetching reviews:", err);
+        res.status(500).json({ error: "Internal server error" });
+    }
 };
 
-// Update a review
+
+// Update review
 exports.updateReview = async (req, res) => {
-  const { id } = req.params;
-  const { rating, comment } = req.body;
-
-  try {
-    await db.query(
-      "UPDATE reviews SET rating = ?, comment = ? WHERE id = ?",
-      [rating, comment, id]
-    );
-
-    res.json({ message: "Review updated successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+    try {
+        const { id } = req.params;
+        const { rating, comment } = req.body;
+        await db.query(
+            `UPDATE reviews SET rating = ?, comment = ? WHERE id = ?`,
+            [rating, comment, id]
+        );
+        res.json({ message: "Review updated" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
-// Delete a review
+// Delete review
 exports.deleteReview = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    await db.query("DELETE FROM reviews WHERE id = ?", [id]);
-    res.json({ message: "Review deleted successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+    try {
+        const { id } = req.params;
+        await db.query(`DELETE FROM reviews WHERE id = ?`, [id]);
+        res.json({ message: "Review deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
